@@ -71,6 +71,8 @@
 #include "ndpi_main.h"
 #include "reader_util.h"
 #include "ndpi_classify.h"
+#include "libnet.h"
+#include <pthread.h>
 
 extern u_int8_t enable_protocol_guess, enable_flow_stats, enable_payload_analyzer;
 extern u_int8_t verbose, human_readeable_string_len;
@@ -79,6 +81,32 @@ static u_int32_t flow_id = 0;
 
 u_int8_t enable_doh_dot_detection = 0;
 extern ndpi_init_prefs init_prefs;
+
+static pthread_key_t key;
+static pthread_once_t key_once = PTHREAD_ONCE_INIT; 
+
+enum {
+    SURI_HOST_IS_SNIFFER_ONLY,
+    SURI_HOST_IS_ROUTER,
+};
+
+#define IS_SURI_HOST_MODE_SNIFFER_ONLY(host_mode)  ((host_mode) == SURI_HOST_IS_SNIFFER_ONLY)
+
+typedef struct Libnet11Packet_ {
+    uint32_t ack, seq;
+    uint16_t window, dsize;
+    uint8_t ttl;
+    uint16_t id;
+    uint32_t flow;
+    uint8_t class;
+    struct libnet_in6_addr src6, dst6;
+    // uint32_t src6, dst6;
+    uint32_t src4, dst4;
+    // uint32_t src, dst;
+    uint16_t sp, dp;
+    uint16_t len;
+    uint8_t *smac, *dmac;
+} Libnet11Packet;
 
 /* ****************************************************** */
 
@@ -109,6 +137,324 @@ u_int32_t max_num_reported_top_payloads = 25;
 u_int16_t min_pattern_len = 4;
 u_int16_t max_pattern_len = 8;
 
+static inline void make_key()
+{
+    (void) pthread_key_create(&key, NULL);
+}
+
+static inline libnet_t *GetCtx(struct ndpi_flow_info *flow_ptr, int injection_type)
+{
+    /* fast path: use cache ctx */
+    void *ptr;
+    (void) pthread_once(&key_once, make_key);
+    if ((ptr = pthread_getspecific(key)) != NULL){
+      return ptr;
+    }
+
+    /* slow path: setup a new ctx */
+    bool store_ctx = true;
+    const char *devname = NULL;
+    devname = libnet_addr2name4(flow_ptr->dst_ip, LIBNET_DONT_RESOLVE);
+
+    char ebuf[LIBNET_ERRBUF_SIZE];
+    libnet_t *c = libnet_init(injection_type, LIBNET_INIT_CAST devname, ebuf);
+    if (c == NULL) {
+        LOG(NDPI_LOG_ERROR, "libnet init failed\n");
+    }
+    ptr = (void*)c;
+    (void) pthread_setspecific(key, ptr);
+
+    return c;
+}
+
+static inline void SetupTCP(struct ndpi_flow_info *flow_ptr, Libnet11Packet *lpacket, 
+                            struct ndpi_tcphdr **tcp_header, enum RejectDirection dir,
+                            u_int16_t payload_len)
+{
+    switch (dir) {
+        case REJECT_DIR_SRC:
+            LOG(NDPI_LOG_DEBUG,"sending a tcp reset to src");
+            /* We follow http://tools.ietf.org/html/rfc793#section-3.4 :
+             *  If packet has no ACK, the seq number is 0 and the ACK is built
+             *  the normal way. If packet has a ACK, the seq of the RST packet
+             *  is equal to the ACK of incoming packet and the ACK is build
+             *  using packet sequence number and size of the data. */
+            if ((*tcp_header)->ack_seq == 0) {
+                lpacket->seq = 0;
+                lpacket->ack = ntohl((*tcp_header)->seq) + payload_len + 1;
+            } else {
+                lpacket->seq = ntohl((*tcp_header)->ack_seq);
+                lpacket->ack = ntohl((*tcp_header)->seq) + payload_len;
+            }
+
+            lpacket->sp = ntohs((*tcp_header)->dest);
+            lpacket->dp = ntohs((*tcp_header)->source);
+            // lpacket->dst = ntohl(flow_ptr->src_ip);
+            // lpacket->src = ntohl(flow_ptr->dst_ip);
+            break;
+        case REJECT_DIR_DST:
+        default:
+            LOG(NDPI_LOG_DEBUG,"sending a tcp reset to dst");
+            lpacket->seq = ntohl((*tcp_header)->seq);
+            lpacket->ack = ntohl((*tcp_header)->ack_seq);
+
+            lpacket->sp = ntohs((*tcp_header)->source);
+            lpacket->dp = ntohs((*tcp_header)->dest);
+
+            // lpacket->src = ntohl(flow_ptr->src_ip);
+            // lpacket->dst = ntohl(flow_ptr->dst_ip);
+            break;
+    }
+    lpacket->window = ntohs((*tcp_header)->window);
+    //lpacket.seq += lpacket.dsize;
+}
+
+static inline int BuildTCP(struct libnet_t *c, Libnet11Packet *lpacket)
+{
+    /* build the package */
+    if ((libnet_build_tcp(
+                    lpacket->sp,           /* source port */
+                    lpacket->dp,           /* dst port */
+                    lpacket->seq,          /* seq number */
+                    lpacket->ack,          /* ack number */
+                    TH_RST|TH_ACK,         /* flags */
+                    lpacket->window,       /* window size */
+                    0,                     /* checksum */
+                    0,                     /* urgent flag */
+                    LIBNET_TCP_H,          /* header length */
+                    NULL,                  /* payload */
+                    0,                     /* payload length */
+                    c,                     /* libnet context */
+                    0)) < 0)               /* libnet ptag */
+    {
+        LOG(NDPI_LOG_ERROR, "libnet_build_tcp failed\n");
+        return -1;
+    }
+    return 0;
+}
+
+static inline int BuildIPv4(struct libnet_t *c, Libnet11Packet *lpacket, const uint8_t proto)
+{
+    if ((libnet_build_ipv4(
+                    lpacket->len,                 /* entire packet length */
+                    0,                            /* tos */
+                    lpacket->id,                  /* ID */
+                    0,                            /* fragmentation flags and offset */
+                    lpacket->ttl,                 /* TTL */
+                    proto,                        /* protocol */
+                    0,                            /* checksum */
+                    lpacket->src4,                /* source address */
+                    lpacket->dst4,                /* destination address */
+                    NULL,                         /* pointer to packet data (or NULL) */
+                    0,                            /* payload length */
+                    c,                            /* libnet context pointer */
+                    0)) < 0)                      /* packet id */
+    {
+        LOG(NDPI_LOG_ERROR, "libnet_build_ipv4 %s failed\n", libnet_geterror(c));
+        return -1;
+    }
+    return 0;
+}
+
+static inline int BuildIPv6(struct libnet_t *c, Libnet11Packet *lpacket, const uint8_t proto)
+{
+    if ((libnet_build_ipv6(
+                    lpacket->class,               /* traffic class */
+                    lpacket->flow,                /* Flow label */
+                    lpacket->len,                 /* payload length */
+                    proto,                        /* next header */
+                    lpacket->ttl,                 /* TTL */
+                    lpacket->src6,                /* source address */
+                    lpacket->dst6,                /* destination address */
+                    NULL,                         /* pointer to packet data (or NULL) */
+                    0,                            /* payload length */
+                    c,                            /* libnet context pointer */
+                    0)) < 0)                      /* packet id */
+    {
+        LOG(NDPI_LOG_ERROR, "libnet_build_ipv6 %s failed\n", libnet_geterror(c));
+        return -1;
+    }
+    return 0;
+}
+
+static inline void SetupEthernet(struct ndpi_ethhdr* eth_ptr, Libnet11Packet *lpacket, enum RejectDirection dir)
+{
+    switch (dir) {
+        case REJECT_DIR_SRC:
+            lpacket->smac = (uint8_t *)eth_ptr->h_dest;
+            lpacket->dmac = (uint8_t *)eth_ptr->h_source;
+            break;
+        case REJECT_DIR_DST:
+        default:
+            lpacket->smac = (uint8_t *)eth_ptr->h_source;
+            lpacket->dmac = (uint8_t *)eth_ptr->h_dest;
+            break;
+    }
+}
+
+static inline int BuildEthernet(struct libnet_t *c, Libnet11Packet *lpacket, uint16_t proto)
+{
+    if ((libnet_build_ethernet(lpacket->dmac,lpacket->smac, proto , NULL, 0, c, 0)) < 0) {
+        LOG(NDPI_LOG_ERROR, "libnet_build_ethernet %sfailed\n", libnet_geterror(c));
+        return -1;
+    }
+    return 0;
+}
+
+static inline int BuildEthernetVLAN(struct libnet_t *c, Libnet11Packet *lpacket, uint16_t proto, uint16_t vlan_id)
+{
+    if (libnet_build_802_1q(
+                lpacket->dmac, lpacket->smac, ETHERTYPE_VLAN,
+                0x000, 0x000, vlan_id, proto,
+                NULL,                                   /* payload */
+                0,                                      /* payload size */
+                c,                                      /* libnet handle */
+                0) < 0)
+    {
+        LOG(NDPI_LOG_ERROR, "libnet_build_802_1q %sfailed\n", libnet_geterror(c));
+        return -1;
+    }
+    return 0;
+}
+
+static inline void ClearCtx(struct libnet_t *c)
+{
+    void* ptr;
+    (void) pthread_setspecific(key, ptr);
+    if (ptr == c)
+        libnet_clear_packet(c);
+    else
+        libnet_destroy(c);
+}
+
+int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr, 
+                      struct ndpi_tcphdr** tcp_header, u_int16_t payload_len, 
+                      enum RejectDirection dir){
+  
+  Libnet11Packet lpacket;
+  int result;
+
+  /* fill in struct defaults */
+  lpacket.ttl = 0;
+  lpacket.id = 0;
+  lpacket.flow = 0;
+  lpacket.class = 0;
+
+  if (flow_ptr == NULL || eth_ptr == NULL || tcp_header == NULL)
+      return 1;
+
+  libnet_t *c = GetCtx(flow_ptr, LIBNET_RAW4);
+  if (c == NULL)
+      return 1;
+
+  lpacket.len = LIBNET_IPV4_H + LIBNET_TCP_H;
+  
+  switch(dir) {
+    case REJECT_DIR_SRC:
+        lpacket.src4 = GET_IPV4_DST_ADDR_U32(flow_ptr);
+        lpacket.dst4 = GET_IPV4_SRC_ADDR_U32(flow_ptr);
+    case REJECT_DIR_DST:
+    default:
+        lpacket.src4 = GET_IPV4_SRC_ADDR_U32(flow_ptr);
+        lpacket.dst4 = GET_IPV4_DST_ADDR_U32(flow_ptr);
+        break;
+  }
+
+  lpacket.ttl = 64;
+
+  SetupTCP(flow_ptr, &lpacket, tcp_header, dir, payload_len);
+
+  if (BuildTCP(c, &lpacket) < 0)
+        goto cleanup;
+
+    if (BuildIPv4(c, &lpacket, IPPROTO_TCP) < 0)
+        goto cleanup;
+
+        SetupEthernet(eth_ptr, &lpacket, dir);
+
+    if (flow_ptr->vlan_id != 1) {
+        if (BuildEthernetVLAN(c, &lpacket, ETHERNET_TYPE_IP, flow_ptr->vlan_id) < 0)
+            goto cleanup;
+    } else {
+        if (BuildEthernet(c, &lpacket, ETHERNET_TYPE_IP) < 0)
+            goto cleanup;
+    }
+
+    result = libnet_write(c);
+    if (result == -1) {
+        LOG(NDPI_LOG_ERROR, "libnet_write failed: %s \n", libnet_geterror(c));
+        goto cleanup;
+    }
+
+cleanup:
+    ClearCtx(c);
+    return 0;
+
+}
+int RejectSendIPv6Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr, 
+                      struct ndpi_tcphdr** tcp_header, u_int16_t payload_len, 
+                      enum RejectDirection dir){
+  
+  Libnet11Packet lpacket;
+  int result;
+
+  /* fill in struct defaults */
+  lpacket.ttl = 0;
+  lpacket.id = 0;
+  lpacket.flow = 0;
+  lpacket.class = 0;
+
+  if (flow_ptr == NULL || eth_ptr == NULL || tcp_header == NULL)
+      return 1;
+
+  libnet_t *c = GetCtx(flow_ptr, LIBNET_RAW4);
+  if (c == NULL)
+      return 1;
+
+  lpacket.len = LIBNET_IPV6_H + LIBNET_TCP_H;
+  
+  switch(dir) {
+    case REJECT_DIR_SRC:
+        lpacket.src6.__u6_addr = GET_IPV6_DST_ADDR(flow_ptr).u6_addr;
+        lpacket.dst6.__u6_addr = GET_IPV6_SRC_ADDR(flow_ptr).u6_addr;
+    case REJECT_DIR_DST:
+    default:
+        lpacket.src6.__u6_addr = GET_IPV6_SRC_ADDR(flow_ptr).u6_addr;
+        lpacket.dst6.__u6_addr = GET_IPV6_DST_ADDR(flow_ptr).u6_addr;
+        break;
+  }
+
+  lpacket.ttl = 64;
+
+  SetupTCP(flow_ptr, &lpacket, tcp_header, dir, payload_len);
+
+  if (BuildTCP(c, &lpacket) < 0)
+        goto cleanup;
+
+    if (BuildIPv4(c, &lpacket, IPPROTO_ICMP) < 0)
+        goto cleanup;
+
+        SetupEthernet(eth_ptr, &lpacket, dir);
+
+    if (flow_ptr->vlan_id != 1) {
+        if (BuildEthernetVLAN(c, &lpacket, ETHERNET_TYPE_IPV6, flow_ptr->vlan_id) < 0)
+            goto cleanup;
+    } else {
+        if (BuildEthernet(c, &lpacket, ETHERNET_TYPE_IPV6) < 0)
+            goto cleanup;
+    }
+
+    result = libnet_write(c);
+    if (result == -1) {
+        LOG(NDPI_LOG_ERROR, "libnet_write failed: %s \n", libnet_geterror(c));
+        goto cleanup;
+    }
+
+cleanup:
+    ClearCtx(c);
+    return 0;
+
+}
 /* *********************************************************** */
 
 void ndpi_analyze_payload(struct ndpi_flow_info *flow,
@@ -1338,6 +1684,174 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
   }
 }
 
+void __process_ndpi_info(struct ndpi_flow_info * flow_ptr,
+             const struct ndpi_ethhdr * eth_header,
+					   const struct ndpi_iphdr *iph,
+					   struct ndpi_ipv6hdr *iph6,
+             struct ndpi_tcphdr** tcp_header,
+             const char* svrname_ptr,
+             int payload_len,
+             int svrname_len){
+  char *tmp_svrname[] = {"servername1", "servername2", "servername3"};
+  for( int i = 0; i < 3; i ++){
+    if(strcmp(svrname_ptr, tmp_svrname[i]) == 0){
+      if(iph != NULL){
+        RejectSendIPv4Tcp(eth_header, flow_ptr, tcp_header, payload_len, REJECT_DIR_SRC);
+      }else {
+        RejectSendIPv6Tcp(eth_header, flow_ptr, tcp_header, payload_len, REJECT_DIR_SRC);
+      }
+    }
+  }
+}
+
+void _process_ndpi_info(struct ndpi_flow_info * flow_ptr,
+             const struct ndpi_ethhdr * eth_header,
+					   const struct ndpi_iphdr *iph,
+					   struct ndpi_ipv6hdr *iph6,
+             struct ndpi_tcphdr** tcp_header,
+             int payload_len) {
+  
+  u_int i, is_quic = 0;
+  char out[128], *s;
+  
+  if(!flow_ptr->ndpi_flow) return;
+
+  flow_ptr->info_type = INFO_INVALID;
+
+  s = ndpi_get_flow_risk_info(flow_ptr->ndpi_flow, out, sizeof(out), 0 /* text */);
+
+  if(s != NULL)
+    flow_ptr->risk_str = ndpi_strdup(s);  
+  
+  flow_ptr->confidence = flow_ptr->ndpi_flow->confidence;
+  flow_ptr->num_dissector_calls = flow_ptr->ndpi_flow->num_dissector_calls;
+
+  ndpi_snprintf(flow_ptr->host_server_name, sizeof(flow_ptr->host_server_name), "%s",
+	   flow_ptr->ndpi_flow->host_server_name);
+
+  ndpi_snprintf(flow_ptr->flow_extra_info, sizeof(flow_ptr->flow_extra_info), "%s",
+	   flow_ptr->ndpi_flow->flow_extra_info);
+
+  flow_ptr->risk = flow_ptr->ndpi_flow->risk;
+  if(is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_HTTP)
+      || is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_HTTP_PROXY)
+      || is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_HTTP_CONNECT)) {
+    if(flow_ptr->ndpi_flow->http.url != NULL) {
+      ndpi_snprintf(flow_ptr->http.url, sizeof(flow_ptr->http.url), "%s", flow_ptr->ndpi_flow->http.url);
+      flow_ptr->http.response_status_code = flow_ptr->ndpi_flow->http.response_status_code;
+      ndpi_snprintf(flow_ptr->http.content_type, sizeof(flow_ptr->http.content_type), "%s", flow_ptr->ndpi_flow->http.content_type ? flow_ptr->ndpi_flow->http.content_type : "");
+      ndpi_snprintf(flow_ptr->http.request_content_type, sizeof(flow_ptr->http.request_content_type), "%s", flow_ptr->ndpi_flow->http.request_content_type ? flow_ptr->ndpi_flow->http.request_content_type : "");
+    }
+    if (flow_ptr->host_server_name != NULL){
+      __process_ndpi_info(flow_ptr, eth_header, iph, iph6, tcp_header, flow_ptr->host_server_name, payload_len, strlen(flow_ptr->host_server_name));
+    }else {
+      if(iph!= NULL){
+        LOG(NDPI_LOG_ERROR, "flow[http srcipv4:%I32u, srcp:%I16u, protocp%d, dstipv4:%I32u, dstp:%I16u, masterproto:%d, appproto:%d, httpurl:%s] have no hostservername\n"
+            , flow_ptr->src_ip, flow_ptr->src_port, flow_ptr->protocol, flow_ptr->dst_ip
+            , flow_ptr->dst_port, flow_ptr->detected_protocol.master_protocol
+            , flow_ptr->detected_protocol.app_protocol, flow_ptr->http.url);
+      }else {
+        LOG(NDPI_LOG_ERROR, "flow[http srcipv6:%I64u, srcp:%I16u, protocp%d, dstipv6:%I64u, dstp:%I16u, masterproto:%d, appproto:%d, httpurl:%s]] have no hostservername\n"
+            , flow_ptr->src_ip6, flow_ptr->src_port, flow_ptr->protocol, flow_ptr->dst_ip6
+            , flow_ptr->dst_port, flow_ptr->detected_protocol.master_protocol
+            , flow_ptr->detected_protocol.app_protocol, flow_ptr->http.url);
+      }
+    }
+  }
+  else if (is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_TLS)) {
+    flow_ptr->ssh_tls.ssl_version = flow_ptr->ndpi_flow->protos.tls_quic.ssl_version;
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.server_names_len > 0 && flow_ptr->ndpi_flow->protos.tls_quic.server_names)
+      flow_ptr->ssh_tls.server_names = ndpi_strdup(flow_ptr->ndpi_flow->protos.tls_quic.server_names);
+
+    flow_ptr->ssh_tls.notBefore = flow_ptr->ndpi_flow->protos.tls_quic.notBefore;
+    flow_ptr->ssh_tls.notAfter = flow_ptr->ndpi_flow->protos.tls_quic.notAfter;
+    ndpi_snprintf(flow_ptr->ssh_tls.ja3_client, sizeof(flow_ptr->ssh_tls.ja3_client), "%s",
+	     flow_ptr->ndpi_flow->protos.tls_quic.ja3_client);
+    ndpi_snprintf(flow_ptr->ssh_tls.ja3_server, sizeof(flow_ptr->ssh_tls.ja3_server), "%s",
+	     flow_ptr->ndpi_flow->protos.tls_quic.ja3_server);
+    flow_ptr->ssh_tls.server_unsafe_cipher = flow_ptr->ndpi_flow->protos.tls_quic.server_unsafe_cipher;
+    flow_ptr->ssh_tls.server_cipher = flow_ptr->ndpi_flow->protos.tls_quic.server_cipher;
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.fingerprint_set) {
+      memcpy(flow_ptr->ssh_tls.sha1_cert_fingerprint,
+	     flow_ptr->ndpi_flow->protos.tls_quic.sha1_certificate_fingerprint, 20);
+      flow_ptr->ssh_tls.sha1_cert_fingerprint_set = 1;
+    }
+
+    flow_ptr->ssh_tls.browser_heuristics = flow_ptr->ndpi_flow->protos.tls_quic.browser_heuristics;
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.alpn) {
+      if((flow_ptr->ssh_tls.tls_alpn = ndpi_strdup(flow_ptr->ndpi_flow->protos.tls_quic.alpn)) != NULL)
+	      correct_csv_data_field(flow_ptr->ssh_tls.tls_alpn);
+    }
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.issuerDN)
+      flow_ptr->ssh_tls.tls_issuerDN = strdup(flow_ptr->ndpi_flow->protos.tls_quic.issuerDN);
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.subjectDN)
+      flow_ptr->ssh_tls.tls_subjectDN = strdup(flow_ptr->ndpi_flow->protos.tls_quic.subjectDN);
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.encrypted_sni.esni) {
+      flow_ptr->ssh_tls.encrypted_sni.esni = strdup(flow_ptr->ndpi_flow->protos.tls_quic.encrypted_sni.esni);
+      flow_ptr->ssh_tls.encrypted_sni.cipher_suite = flow_ptr->ndpi_flow->protos.tls_quic.encrypted_sni.cipher_suite;
+    }
+
+    if(flow_ptr->ssh_tls.tls_supported_versions) {
+      if((flow_ptr->ssh_tls.tls_supported_versions = ndpi_strdup(flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions)) != NULL)
+	      correct_csv_data_field(flow_ptr->ssh_tls.tls_supported_versions);
+    }
+
+    if(flow_ptr->ndpi_flow->protos.tls_quic.alpn
+       && flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions) {
+      correct_csv_data_field(flow_ptr->ndpi_flow->protos.tls_quic.alpn);
+      correct_csv_data_field(flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions);
+
+      flow_ptr->info_type = INFO_TLS_QUIC_ALPN_VERSION;
+      ndpi_snprintf(flow_ptr->tls_quic.alpn, sizeof(flow_ptr->tls_quic.alpn), "%s",
+                    flow_ptr->ndpi_flow->protos.tls_quic.alpn);
+      ndpi_snprintf(flow_ptr->tls_quic.tls_supported_versions,
+                    sizeof(flow_ptr->tls_quic.tls_supported_versions),
+                    "%s", flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions);
+    } else if(flow_ptr->ndpi_flow->protos.tls_quic.alpn) {
+      correct_csv_data_field(flow_ptr->ndpi_flow->protos.tls_quic.alpn);
+
+      flow_ptr->info_type = INFO_TLS_QUIC_ALPN_ONLY;
+      ndpi_snprintf(flow_ptr->tls_quic.alpn, sizeof(flow_ptr->tls_quic.alpn), "%s",
+                    flow_ptr->ndpi_flow->protos.tls_quic.alpn);
+    }
+
+    if(enable_doh_dot_detection) {
+      /* For TLS we use TLS block lenght instead of payload lenght */
+      ndpi_reset_bin(&flow_ptr->payload_len_bin);
+
+      for(i=0; i<flow_ptr->ndpi_flow->l4.tcp.tls.num_tls_blocks; i++) {
+        u_int16_t len = abs(flow_ptr->ndpi_flow->l4.tcp.tls.tls_application_blocks_len[i]);
+
+    /* printf("[TLS_LEN] %u\n", len); */
+        ndpi_inc_bin(&flow_ptr->payload_len_bin, plen2slot(len), 1);
+      }
+    }
+
+    if (flow_ptr->host_server_name != NULL){
+      __process_ndpi_info(flow_ptr, eth_header, iph, iph6, tcp_header, flow_ptr->host_server_name, payload_len, strlen(flow_ptr->host_server_name));
+    }else {
+      if(iph!= NULL){
+        LOG(NDPI_LOG_ERROR, "flow[tsl srcipv4:%I32u, srcp:%I16u, protocp%d, dstipv4:%I32u, dstp:%I16u, masterproto:%d, appproto:%d] have no hostservername\n"
+            , flow_ptr->src_ip, flow_ptr->src_port, flow_ptr->protocol, flow_ptr->dst_ip
+            , flow_ptr->dst_port, flow_ptr->detected_protocol.master_protocol
+            , flow_ptr->detected_protocol.app_protocol);
+      }else {
+        LOG(NDPI_LOG_ERROR, "flow[tsl srcipv6:%I64u, srcp:%I16u, protocp%d, dstipv6:%I64u, dstp:%I16u, masterproto:%d, appproto:%d] have no hostservername\n"
+            , flow_ptr->src_ip6, flow_ptr->src_port, flow_ptr->protocol, flow_ptr->dst_ip6
+            , flow_ptr->dst_port, flow_ptr->detected_protocol.master_protocol
+            , flow_ptr->detected_protocol.app_protocol);
+      }
+    }
+  }
+
+}
+
 /* ****************************************************** */
 
 /**
@@ -1398,6 +1912,7 @@ void update_tcp_flags_count(struct ndpi_flow_info* flow, struct ndpi_tcphdr* tcp
    @Note: ipsize = header->len - ip_offset ; rawsize = header->len
 */
 static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
+             const struct ndpi_ethhdr * eth_header,
 					   const u_int64_t time_ms,
 					   u_int16_t vlan_id,
 					   ndpi_packet_tunnel tunnel_type,
@@ -1656,7 +2171,8 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 	  if(enable_protocol_guess) workflow->stats.guessed_flow_protocols++;
 	}
 
-	process_ndpi_collected_info(workflow, flow);
+  _process_ndpi_info(flow, eth_header, iph, iph6, tcph, payload_len);
+	// process_ndpi_collected_info(workflow, flow);
       }
     }
   }
@@ -2199,7 +2715,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   }
 
   /* process the packet */
-  return(packet_processing(workflow, time_ms, vlan_id, tunnel_type, iph, iph6,
+  return(packet_processing(workflow, ethernet, time_ms, vlan_id, tunnel_type, iph, iph6,
 			   ip_offset, header->caplen - ip_offset,
 			   header->caplen, header, packet, header->ts,
 			   flow_risk));

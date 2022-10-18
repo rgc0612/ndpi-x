@@ -34,7 +34,7 @@
 #include "ndpi_includes.h"
 #include "ndpi_classify.h"
 #include "ndpi_typedefs.h"
-
+// #include "ndpi_ntoh.h"
 #ifdef USE_DPDK
 #include <rte_eal.h>
 #include <rte_ether.h>
@@ -53,7 +53,7 @@
 extern int dpdk_port_init(int port, struct rte_mempool *mbuf_pool);
 extern int dpdk_port_deinit(int port);
 #endif
-
+#define NDPI_ENABLE_DEBUG_MESSAGES 1
 #define PLEN_MAX         1504
 #define PLEN_BIN_LEN     32
 #define PLEN_NUM_BINS    48 /* 47*32 = 1504 */
@@ -417,6 +417,24 @@ void ndpi_flow_info_free_data(struct ndpi_flow_info *flow);
 void ndpi_flow_info_freer(void *node);
 const char* print_cipher_id(u_int32_t cipher);
 float ndpi_flow_get_byte_count_entropy(const uint32_t byte_count[256], unsigned int num_bytes);
+
+enum RejectDirection {
+    REJECT_DIR_SRC = 0,
+    REJECT_DIR_DST = 1,
+};
+
+#define GET_IPV4_SRC_ADDR_U32(f) (ntohl((f)->src_ip))
+#define GET_IPV4_DST_ADDR_U32(f) (ntohl((f)->dst_ip))
+#define GET_IPV6_SRC_ADDR(f) ((f)->src_ip6)
+#define GET_IPV6_DST_ADDR(f) ((f)->dst_ip6)
+
+int RejectSendIPv4Tcp(struct ndpi_ethhdr* ethPtr, struct ndpi_flow_info* flowPtr, 
+                      struct ndpi_tcphdr** tcp_header, u_int16_t payload_len, 
+                      enum RejectDirection);
+int RejectSendIPv6Tcp(struct ndpi_ethhdr* ethPtr, struct ndpi_flow_info* flowPtr, 
+                      struct ndpi_tcphdr** tcp_header, u_int16_t payload_len, 
+                      enum RejectDirection);
+
 
 extern int nDPI_LogLevel;
 
