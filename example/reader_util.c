@@ -119,9 +119,9 @@ u_int16_t min_pattern_len = 4;
 u_int16_t max_pattern_len = 8;
 
 //#ifdef USE_DPDK
-int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr,
-                      struct ndpi_iphdr *iph, struct ndpi_tcphdr* tcp_header,
-                      u_int16_t payload_len,
+int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr, 
+                      struct ndpi_iphdr *iph, struct ndpi_tcphdr* tcp_header, 
+                      u_int16_t payload_len, 
                       u_int16_t rawsize){
   printf("start RejectSendIPv4Tcp\n");
   if (flow_ptr == NULL)
@@ -132,7 +132,7 @@ int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_p
       printf("eth_ptr == NULL\n");
       return 1;
     }
-    int i = 0;
+    int i = 0; 
     for (; i < 6; i ++){
        char tmp;
        tmp = eth_ptr->h_dest[i];
@@ -144,7 +144,7 @@ int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_p
     if(iph == NULL){
     printf("iph == NULL\n");
       return 1;
-    }
+    } 
     u_int32_t tmp;
     tmp = iph->daddr;
     iph->daddr = iph->saddr;
@@ -218,11 +218,11 @@ int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_p
   }
   return 0;
 }
-//int RejectSendIPv6Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr,
-//                      struct ndpi_in6_addr *iph6, struct ndpi_tcphdr** tcp_header,
-//                      u_int16_t payload_len,
+//int RejectSendIPv6Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr, 
+//                      struct ndpi_in6_addr *iph6, struct ndpi_tcphdr** tcp_header, 
+//                      u_int16_t payload_len, 
 //                      u_int16_t rawsize){
-
+  
 //  return 1;
 //}
 //#endif
@@ -907,7 +907,7 @@ static struct ndpi_flow_info *get_ndpi_flow_info(struct ndpi_workflow * workflow
   flow.protocol = iph->protocol, flow.vlan_id = vlan_id;
   flow.src_ip = iph->saddr, flow.dst_ip = iph->daddr;
   flow.src_port = htons(*sport), flow.dst_port = htons(*dport);
-  flow.hashval = hashval = flow.protocol + ntohl(flow.src_ip) + ntohl(flow.dst_ip)
+  flow.hashval = hashval = flow.protocol + ntohl(flow.src_ip) + ntohl(flow.dst_ip) 
 	  + ntohs(flow.src_port) + ntohs(flow.dst_port);
 
 #if 0
@@ -1160,7 +1160,7 @@ u_int8_t plen2slot(u_int16_t plen) {
 void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_flow_info *flow) {
   u_int i, is_quic = 0;
   char out[128], *s;
-
+  
   if(!flow->ndpi_flow) return;
 
   flow->info_type = INFO_INVALID;
@@ -1168,8 +1168,8 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
   s = ndpi_get_flow_risk_info(flow->ndpi_flow, out, sizeof(out), 0 /* text */);
 
   if(s != NULL)
-    flow->risk_str = ndpi_strdup(s);
-
+    flow->risk_str = ndpi_strdup(s);  
+  
   flow->confidence = flow->ndpi_flow->confidence;
   flow->num_dissector_calls = flow->ndpi_flow->num_dissector_calls;
 
@@ -1447,7 +1447,7 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
       if(workflow->__flow_detected_callback != NULL)
 	workflow->__flow_detected_callback(workflow, flow, workflow->__flow_detected_udata);
     }
-
+   
     flow->flow_payload = flow->ndpi_flow->flow_payload, flow->flow_payload_len = flow->ndpi_flow->flow_payload_len;
     flow->ndpi_flow->flow_payload = NULL; /* We'll free the memory */
 
@@ -1459,63 +1459,13 @@ int __process_ndpi_info(struct ndpi_flow_info * flow_ptr,
              struct ndpi_ethhdr * eth_header,
 					   struct ndpi_iphdr *iph,
 					   struct ndpi_ipv6hdr *iph6,
-/*
- * reader_util.c
- *
- * Copyright (C) 2011-22 - ntop.org
- *
- * This file is part of nDPI, an open source deep packet inspection
- * library based on the OpenDPI and PACE technology by ipoque GmbH
- *
- * nDPI is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * nDPI is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with nDPI.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
-
-#include "ndpi_config.h"
-#include "ndpi_api.h"
-
-#include <stdlib.h>
-#include <math.h>
-#include <float.h>
-
-#ifdef WIN32
-#include <winsock2.h> /* winsock.h is included automatically */
-#include <windows.h>
-#include <ws2tcpip.h>
-#include <process.h>
-#include <io.h>
-#ifndef DISABLE_NPCAP
-#include <ip6_misc.h>
-#endif
-#else
-#include <unistd.h>
-#include <netinet/in.h>
-#endif
-
-#include "reader_util.h"
-
-#define SNAP                   0XAA
-#define BSTP                   0x42     /* Bridge Spanning Tree Protocol */
-
-/* Keep last 32 packets */
              struct ndpi_tcphdr* tcp_header,
              const char* svrname_ptr,
              int payload_len,
              int svrname_len,
              u_int16_t rawsize){
   char *tmp_svrname[] = {"servername1", "servername2", "servername3"};
-  printf("servername %s\n", svrname_ptr);
+  printf("servername %s\n", svrname_ptr);  
   int i = 0;
   for(; i < 3; i ++){
     if(strcmp(svrname_ptr, tmp_svrname[i]) == 0){
@@ -1536,40 +1486,15 @@ int _process_ndpi_info(struct ndpi_flow_info * flow_ptr,
              struct ndpi_tcphdr* tcp_header,
              int payload_len,
              u_int16_t rawsize) {
-  printf("_process_ndpi_info start\n");
-  u_int i, is_quic = 0;
-  char out[128], *s;
-
+  printf("_process_ndpi_info start\n"); 
+  
   if(flow_ptr->ndpi_flow) return 1;
-
-  flow_ptr->info_type = INFO_INVALID;
-
-  s = ndpi_get_flow_risk_info(flow_ptr->ndpi_flow, out, sizeof(out), 0 /* text */);
-
-  if(s != NULL)
-    flow_ptr->risk_str = ndpi_strdup(s);
-
-  flow_ptr->confidence = flow_ptr->ndpi_flow->confidence;
-  flow_ptr->num_dissector_calls = flow_ptr->ndpi_flow->num_dissector_calls;
-
-  ndpi_snprintf(flow_ptr->host_server_name, sizeof(flow_ptr->host_server_name), "%s",
-	   flow_ptr->ndpi_flow->host_server_name);
-
-  ndpi_snprintf(flow_ptr->flow_extra_info, sizeof(flow_ptr->flow_extra_info), "%s",
-	   flow_ptr->ndpi_flow->flow_extra_info);
-
   flow_ptr->risk = flow_ptr->ndpi_flow->risk;
   if(is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_HTTP)
       || is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_HTTP_PROXY)
       || is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_HTTP_CONNECT)) {
-    if(flow_ptr->ndpi_flow->http.url != NULL) {
-      ndpi_snprintf(flow_ptr->http.url, sizeof(flow_ptr->http.url), "%s", flow_ptr->ndpi_flow->http.url);
-      flow_ptr->http.response_status_code = flow_ptr->ndpi_flow->http.response_status_code;
-      ndpi_snprintf(flow_ptr->http.content_type, sizeof(flow_ptr->http.content_type), "%s", flow_ptr->ndpi_flow->http.content_type ? flow_ptr->ndpi_flow->http.content_type : "");
-      ndpi_snprintf(flow_ptr->http.request_content_type, sizeof(flow_ptr->http.request_content_type), "%s", flow_ptr->ndpi_flow->http.request_content_type ? flow_ptr->ndpi_flow->http.request_content_type : "");
-    }
     if (flow_ptr->host_server_name != NULL){
-      printf("http flow_ptr->host_server_name != NULL\n");
+      printf("http flow_ptr->host_server_name != NULL\n");   
    return __process_ndpi_info(flow_ptr, eth_header, iph, iph6, tcp_header, flow_ptr->host_server_name, payload_len, strlen(flow_ptr->host_server_name), rawsize);
     }else {
       if(iph!= NULL){
@@ -1589,80 +1514,6 @@ int _process_ndpi_info(struct ndpi_flow_info * flow_ptr,
     }
   }
   else if (is_ndpi_proto(flow_ptr, NDPI_PROTOCOL_TLS)) {
-    flow_ptr->ssh_tls.ssl_version = flow_ptr->ndpi_flow->protos.tls_quic.ssl_version;
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.server_names_len > 0 && flow_ptr->ndpi_flow->protos.tls_quic.server_names)
-      flow_ptr->ssh_tls.server_names = ndpi_strdup(flow_ptr->ndpi_flow->protos.tls_quic.server_names);
-
-    flow_ptr->ssh_tls.notBefore = flow_ptr->ndpi_flow->protos.tls_quic.notBefore;
-    flow_ptr->ssh_tls.notAfter = flow_ptr->ndpi_flow->protos.tls_quic.notAfter;
-    ndpi_snprintf(flow_ptr->ssh_tls.ja3_client, sizeof(flow_ptr->ssh_tls.ja3_client), "%s",
-	     flow_ptr->ndpi_flow->protos.tls_quic.ja3_client);
-    ndpi_snprintf(flow_ptr->ssh_tls.ja3_server, sizeof(flow_ptr->ssh_tls.ja3_server), "%s",
-	     flow_ptr->ndpi_flow->protos.tls_quic.ja3_server);
-    flow_ptr->ssh_tls.server_unsafe_cipher = flow_ptr->ndpi_flow->protos.tls_quic.server_unsafe_cipher;
-    flow_ptr->ssh_tls.server_cipher = flow_ptr->ndpi_flow->protos.tls_quic.server_cipher;
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.fingerprint_set) {
-      memcpy(flow_ptr->ssh_tls.sha1_cert_fingerprint,
-	     flow_ptr->ndpi_flow->protos.tls_quic.sha1_certificate_fingerprint, 20);
-      flow_ptr->ssh_tls.sha1_cert_fingerprint_set = 1;
-    }
-
-    flow_ptr->ssh_tls.browser_heuristics = flow_ptr->ndpi_flow->protos.tls_quic.browser_heuristics;
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.alpn) {
-      if((flow_ptr->ssh_tls.tls_alpn = ndpi_strdup(flow_ptr->ndpi_flow->protos.tls_quic.alpn)) != NULL)
-	      correct_csv_data_field(flow_ptr->ssh_tls.tls_alpn);
-    }
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.issuerDN)
-      flow_ptr->ssh_tls.tls_issuerDN = strdup(flow_ptr->ndpi_flow->protos.tls_quic.issuerDN);
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.subjectDN)
-      flow_ptr->ssh_tls.tls_subjectDN = strdup(flow_ptr->ndpi_flow->protos.tls_quic.subjectDN);
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.encrypted_sni.esni) {
-      flow_ptr->ssh_tls.encrypted_sni.esni = strdup(flow_ptr->ndpi_flow->protos.tls_quic.encrypted_sni.esni);
-      flow_ptr->ssh_tls.encrypted_sni.cipher_suite = flow_ptr->ndpi_flow->protos.tls_quic.encrypted_sni.cipher_suite;
-    }
-
-    if(flow_ptr->ssh_tls.tls_supported_versions) {
-      if((flow_ptr->ssh_tls.tls_supported_versions = ndpi_strdup(flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions)) != NULL)
-	      correct_csv_data_field(flow_ptr->ssh_tls.tls_supported_versions);
-    }
-
-    if(flow_ptr->ndpi_flow->protos.tls_quic.alpn
-       && flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions) {
-      correct_csv_data_field(flow_ptr->ndpi_flow->protos.tls_quic.alpn);
-      correct_csv_data_field(flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions);
-
-      flow_ptr->info_type = INFO_TLS_QUIC_ALPN_VERSION;
-      ndpi_snprintf(flow_ptr->tls_quic.alpn, sizeof(flow_ptr->tls_quic.alpn), "%s",
-                    flow_ptr->ndpi_flow->protos.tls_quic.alpn);
-      ndpi_snprintf(flow_ptr->tls_quic.tls_supported_versions,
-                    sizeof(flow_ptr->tls_quic.tls_supported_versions),
-                    "%s", flow_ptr->ndpi_flow->protos.tls_quic.tls_supported_versions);
-    } else if(flow_ptr->ndpi_flow->protos.tls_quic.alpn) {
-      correct_csv_data_field(flow_ptr->ndpi_flow->protos.tls_quic.alpn);
-
-      flow_ptr->info_type = INFO_TLS_QUIC_ALPN_ONLY;
-      ndpi_snprintf(flow_ptr->tls_quic.alpn, sizeof(flow_ptr->tls_quic.alpn), "%s",
-                    flow_ptr->ndpi_flow->protos.tls_quic.alpn);
-    }
-
-    if(enable_doh_dot_detection) {
-      /* For TLS we use TLS block lenght instead of payload lenght */
-      ndpi_reset_bin(&flow_ptr->payload_len_bin);
-
-      for(i=0; i<flow_ptr->ndpi_flow->l4.tcp.tls.num_tls_blocks; i++) {
-        u_int16_t len = abs(flow_ptr->ndpi_flow->l4.tcp.tls.tls_application_blocks_len[i]);
-
-    /* printf("[TLS_LEN] %u\n", len); */
-        ndpi_inc_bin(&flow_ptr->payload_len_bin, plen2slot(len), 1);
-      }
-    }
-
     if (flow_ptr->host_server_name != NULL){
        printf("tls flow_ptr->host_server_name != NULL\n");
        return __process_ndpi_info(flow_ptr, eth_header, iph, iph6, tcp_header, flow_ptr->host_server_name, payload_len, strlen(flow_ptr->host_server_name), rawsize);
@@ -1769,7 +1620,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
   u_int8_t src_to_dst_direction = 1;
   u_int8_t begin_or_end_tcp = 0;
   struct ndpi_proto nproto = NDPI_PROTOCOL_NULL;
-
+  printf("packet_processing start\n");
   if(workflow->prefs.ignore_vlanid)
     vlan_id = 0;
 
@@ -1954,6 +1805,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
     }
   } else { // flow is NULL
     workflow->stats.total_discarded_bytes++;
+    printf("processing packet end111111\n");
     return(nproto);
   }
 
@@ -2005,16 +1857,18 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 							  enable_protocol_guess, &proto_guessed);
 	  if(enable_protocol_guess) workflow->stats.guessed_flow_protocols++;
 	}
+  printf("_process_ndpi_info111\n");
 #ifdef USE_DPDK
   printf("_process_ndpi_info\n");
-  *rsl_mask_ptr = _process_ndpi_info(flow, eth_header, iph, iph6, tcph, payload_len, rawsize);
-  printf("rsl_mask %d", *rsl_mask_ptr);
+  // *rsl_mask_ptr = _process_ndpi_info(flow, eth_header, iph, iph6, tcph, payload_len, rawsize);
+  // printf("rsl_mask_value %d\n", *rsl_mask_ptr);
 #endif
-//	process_ndpi_collected_info(workflow, flow);
+  printf("process_ndpi_collected_info\n");
+	process_ndpi_collected_info(workflow, flow);
       }
     }
   }
-
+  
 #if 0
   if(flow->risk != 0) {
     FILE *r = fopen("/tmp/e", "a");
@@ -2027,7 +1881,7 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
 #endif
 
   *flow_risk = flow->risk;
-
+  printf("processing packet end2\n");
   return(flow->detected_protocol);
 }
 
@@ -2069,7 +1923,8 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
    * Declare pointers to packet headers
    */
   /* --- Ethernet header --- */
-  struct ndpi_ethhdr *ethernet;
+  printf("ndpi_workflow_process_packet start\n");
+ struct ndpi_ethhdr *ethernet;
   /* --- LLC header --- */
   const struct ndpi_llc_header_snap *llc;
 
@@ -2207,7 +2062,9 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       }
       /* No SNAP extension - Spanning Tree pkt must be discarted */
       else if(llc->dsap == BSTP || llc->ssap == BSTP) {
-	goto v4_warning;
+        printf("No SNAP extension - Spanning Tree pkt must be discarted\n");
+        return nproto;
+	// goto v4_warning;
       }
     }
     break;
@@ -2226,12 +2083,15 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     /* Check Bad FCS presence */
     if((radiotap->flags & BAD_FCS) == BAD_FCS) {
       workflow->stats.total_discarded_bytes +=  header->len;
+      printf("ndpi_workflow_process_packet end1\n");
       return(nproto);
     }
 
-    if(header->caplen < (eth_offset + radio_len + sizeof(struct ndpi_wifi_header)))
+    if(header->caplen < (eth_offset + radio_len + sizeof(struct ndpi_wifi_header))){
+      printf("ndpi_workflow_process_packet end2\n");
       return(nproto);
-
+    }
+      
     /* Calculate 802.11 header length (variable) */
     wifi = (struct ndpi_wifi_header*)( packet + eth_offset + radio_len);
     fc = wifi->fc;
@@ -2241,12 +2101,17 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       if((FCF_TO_DS(fc) && FCF_FROM_DS(fc) == 0x0) ||
 	 (FCF_TO_DS(fc) == 0x0 && FCF_FROM_DS(fc)))
 	wifi_len = 26; /* + 4 byte fcs */
-    } else   /* no data frames */
+    } else   /* no data frames */{
+      printf("ndpi_workflow_process_packet end3\n");
       return(nproto);
+    }
 
     /* Check ether_type from LLC */
     if(header->caplen < (eth_offset + wifi_len + radio_len + sizeof(struct ndpi_llc_header_snap)))
+    {
+      printf("ndpi_workflow_process_packet end4\n");
       return(nproto);
+    }
     llc = (struct ndpi_llc_header_snap*)(packet + eth_offset + wifi_len + radio_len);
     if(llc->dsap == SNAP)
       type = ntohs(llc->snap.proto_ID);
@@ -2284,7 +2149,10 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   switch(type) {
   case ETH_P_VLAN:
     if(ip_offset+4 >= (int)header->caplen)
+    {
+      printf("ndpi_workflow_process_packet end5\n");
       return(nproto);
+    }
     vlan_id = ((packet[ip_offset] << 8) + packet[ip_offset+1]) & 0xFFF;
     type = (packet[ip_offset+2] << 8) + packet[ip_offset+3];
     ip_offset += 4;
@@ -2335,7 +2203,10 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
  iph_check:
   /* Check and set IP header size and total packet length */
   if(header->caplen < ip_offset + sizeof(struct ndpi_iphdr))
-    return(nproto); /* Too short for next IP header*/
+  {
+      printf("ndpi_workflow_process_packet end6\n");
+      return(nproto);
+    }/* Too short for next IP header*/
 
   iph = (struct ndpi_iphdr *) &packet[ip_offset];
 
@@ -2357,6 +2228,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
   }
 
   if(iph->version == IPVERSION) {
+    printf("IPv4 end11 %d\n", IPVERSION);
     ip_len = ((u_int16_t)iph->ihl * 4);
     iph6 = NULL;
 
@@ -2378,24 +2250,37 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       }
 
       workflow->stats.total_discarded_bytes +=  header->len;
+      {
+      printf("ndpi_workflow_process_packet end7\n");
       return(nproto);
+      }
     }
   } else if(iph->version == 6) {
+    printf("IPv6 end11 %d\n");
     if(header->caplen < ip_offset + sizeof(struct ndpi_ipv6hdr))
-      return(nproto); /* Too short for IPv6 header*/
+    {
+      printf("ndpi_workflow_process_packet end8\n");
+      return(nproto);
+    } /* Too short for IPv6 header*/
 
     iph6 = (struct ndpi_ipv6hdr *)&packet[ip_offset];
     proto = iph6->ip6_hdr.ip6_un1_nxt;
     ip_len = ntohs(iph6->ip6_hdr.ip6_un1_plen);
 
     if(header->caplen < (ip_offset + sizeof(struct ndpi_ipv6hdr) + ntohs(iph6->ip6_hdr.ip6_un1_plen)))
-      return(nproto); /* Too short for IPv6 payload*/
+    {
+      printf("ndpi_workflow_process_packet end9\n");
+      return(nproto);
+    }/* Too short for IPv6 payload*/
 
     const u_int8_t *l4ptr = (((const u_int8_t *) iph6) + sizeof(struct ndpi_ipv6hdr));
     u_int16_t ipsize = header->caplen - ip_offset;
 
     if(ndpi_handle_ipv6_extension_headers(ipsize - sizeof(struct ndpi_ipv6hdr), &l4ptr, &ip_len, &proto) != 0) {
+    {
+      printf("ndpi_workflow_process_packet end10\n");
       return(nproto);
+    }
     }
 
     if(proto == IPPROTO_IPV6
@@ -2408,24 +2293,31 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
     }
 
     iph = NULL;
-  } else {
-    static u_int8_t ipv4_warning_used = 0;
-
-  v4_warning:
-    if(ipv4_warning_used == 0) {
-      if(!workflow->prefs.quiet_mode)
-        LOG(NDPI_LOG_DEBUG,
-		 "\n\nWARNING: only IPv4/IPv6 packets are supported in this demo (nDPI supports both IPv4 and IPv6), all other packets will be discarded\n\n");
-      ipv4_warning_used = 1;
-    }
-
-    workflow->stats.total_discarded_bytes +=  header->len;
-    return(nproto);
   }
+  // } else {
+  //   static u_int8_t ipv4_warning_used = 0;
+
+  // v4_warning:
+  //   if(ipv4_warning_used == 0) {
+  //     if(!workflow->prefs.quiet_mode)
+  //       LOG(NDPI_LOG_DEBUG,
+	// 	 "\n\nWARNING: only IPv4/IPv6 packets are supported in this demo (nDPI supports both IPv4 and IPv6), all other packets will be discarded\n\n");
+  //     ipv4_warning_used = 1;
+  //   }
+
+  //   workflow->stats.total_discarded_bytes +=  header->len;
+  //   {
+  //     printf("ndpi_workflow_process_packet end11 %d\n", iph->version);
+  //     return(nproto);
+  //   }
+  // }
 
   if(workflow->prefs.decode_tunnels && (proto == IPPROTO_UDP)) {
     if(header->caplen < ip_offset + ip_len + sizeof(struct ndpi_udphdr))
-      return(nproto); /* Too short for UDP header*/
+    {
+      printf("ndpi_workflow_process_packet end12\n");
+      return(nproto);
+    } /* Too short for UDP header*/
     else {
       struct ndpi_udphdr *udp = (struct ndpi_udphdr *)&packet[ip_offset+ip_len];
       u_int16_t sport = ntohs(udp->source), dport = ntohs(udp->dest);
@@ -2471,18 +2363,25 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
               if(header->caplen < ip_offset + sizeof(struct ndpi_ipv6hdr))
 	        return(nproto);
 	    } else if(iph->version != IPVERSION) {
-	      // printf("WARNING: not good (packet_id=%u)!\n", (unsigned int)workflow->stats.raw_packet_count);
-	      goto v4_warning;
+	      printf("WARNING: not good (packet_id=%u)!\n", (unsigned int)workflow->stats.raw_packet_count);
+        return nproto;
+	      // goto v4_warning;
 	    } else {
               if(header->caplen < ip_offset + sizeof(struct ndpi_iphdr))
-	        return(nproto);
+	        {
+      printf("ndpi_workflow_process_packet end13\n");
+      return(nproto);
+    }
 	    }
 	  }
 	}
       } else if((sport == TZSP_PORT) || (dport == TZSP_PORT)) {
 	/* https://en.wikipedia.org/wiki/TZSP */
 	if(header->caplen < ip_offset + ip_len + sizeof(struct ndpi_udphdr) + 4)
-	  return(nproto); /* Too short for TZSP*/
+	{
+      printf("ndpi_workflow_process_packet end14\n");
+      return(nproto);
+    } /* Too short for TZSP*/
 
 	u_int offset           = ip_offset+ip_len+sizeof(struct ndpi_udphdr);
 	u_int8_t version       = packet[offset];
@@ -2552,7 +2451,7 @@ struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
       }
     }
   }
-
+  printf("ndpi_workflow_process_packet end15\n");
   /* process the packet */
   return(packet_processing(workflow, ethernet, time_ms, vlan_id, tunnel_type, iph, iph6,
 			   ip_offset, header->caplen - ip_offset,

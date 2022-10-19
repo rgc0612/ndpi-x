@@ -151,7 +151,7 @@ typedef struct node_a {
 
 // struct to add more statitcs in function printFlowStats
 typedef struct hash_stats{
-  char* domain_name;
+  char* domain_name;  
   int occurency;       /* how many time domain name occury in the flow */
   UT_hash_handle hh;   /* hashtable to collect the stats */
 }hash_stats;
@@ -1686,15 +1686,15 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
     if(flow->flow_payload && (flow->flow_payload_len > 0)) {
       u_int i;
-
+      
       printf("[Payload: ");
 
       for(i=0; i<flow->flow_payload_len; i++)
 	printf("%c", isspace(flow->flow_payload[i]) ? '.' : flow->flow_payload[i]);
-
+	
       printf("]");
     }
-
+    
     fprintf(out, "\n");
   }
 }
@@ -2431,10 +2431,10 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
       label = &label[1];
     else
       label = _customCategoryFilePath;
-
+    
     ndpi_load_categories_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _customCategoryFilePath, label);
   }
-
+  
   if(_riskyDomainFilePath)
     ndpi_load_risk_domain_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _riskyDomainFilePath);
 
@@ -2659,7 +2659,7 @@ static void printRiskStats() {
 static int hash_stats_sort_to_order(void *_a, void *_b){
 	struct hash_stats *a = (struct hash_stats*)_a;
 	struct hash_stats *b = (struct hash_stats*)_b;
-
+	
 	return (a->occurency - b->occurency);
 }
 
@@ -2669,7 +2669,7 @@ static int hash_stats_sort_to_order(void *_a, void *_b){
 static int hash_stats_sort_to_print(void *_a, void *_b){
 	struct hash_stats *a = (struct hash_stats*)_a;
 	struct hash_stats *b = (struct hash_stats*)_b;
-
+	
 	return (b->occurency - a->occurency);
 }
 
@@ -3037,15 +3037,15 @@ static void printFlowsStats() {
 		struct hash_stats *hostsHashT = NULL;
 		struct hash_stats *host_iter = NULL;
 		struct hash_stats *tmp = NULL;
-		int len_max = 0;
-
+		int len_max = 0;    
+		      
 	      	for (i = 0; i<num_flows; i++){
-
+			
 		if(all_flows[i].flow->host_server_name[0] != '\0'){
-
+		
 			int len = strlen(all_flows[i].flow->host_server_name);
 			len_max = ndpi_max(len,len_max);
-
+				
 			struct hash_stats *hostFound;
 			HASH_FIND_STR(hostsHashT, all_flows[i].flow->host_server_name, hostFound);
 
@@ -3056,28 +3056,28 @@ static void printFlowsStats() {
 				if (HASH_COUNT(hostsHashT) == len_table_max) {
 				  int i=0;
 				  while (i<=toDelete){
-
+					
 				    HASH_ITER(hh, hostsHashT, host_iter, tmp){
 				      HASH_DEL(hostsHashT,host_iter);
 				      free(host_iter);
-				      i++;
-				    }
+				      i++;		
+				    }	
 				  }
-
-				}
+				      	
+				}			
 				HASH_ADD_KEYPTR(hh, hostsHashT, newHost->domain_name, strlen(newHost->domain_name), newHost);
-			}
+			}	
 			else
 			  hostFound->occurency++;
-
-
+			
+			
 		}
-
+		
 		if(all_flows[i].flow->ssh_tls.server_info[0] != '\0'){
-
+		
 			int len = strlen(all_flows[i].flow->host_server_name);
 			len_max = ndpi_max(len,len_max);
-
+				
 			struct hash_stats *hostFound;
 		  	HASH_FIND_STR(hostsHashT, all_flows[i].flow->ssh_tls.server_info, hostFound);
 
@@ -3085,41 +3085,41 @@ static void printFlowsStats() {
 		    		struct hash_stats *newHost = (struct hash_stats*)ndpi_malloc(sizeof(hash_stats));
 	      	    		newHost->domain_name = all_flows[i].flow->ssh_tls.server_info;
 		    		newHost->occurency = 1;
-
+	    
 	    			if ((HASH_COUNT(hostsHashT)) == len_table_max) {
 				  int i=0;
 				  while (i<toDelete){
-
+		
 				    HASH_ITER(hh, hostsHashT, host_iter, tmp){
 			 	     HASH_DEL(hostsHashT,host_iter);
 			  	    ndpi_free(host_iter);
-			   	   i++;
+			   	   i++;		
 			 	   }
-				  }
-
-
+				  }	
+	      			
+	      	
 	    			}
 				HASH_ADD_KEYPTR(hh, hostsHashT, newHost->domain_name, strlen(newHost->domain_name), newHost);
 			}
 			else
 			  hostFound->occurency++;
-
-
-		}
-
+			
+			
+		}	
+		
 		//sort the table by the least occurency
 		HASH_SORT(hostsHashT, hash_stats_sort_to_order);
 	}
 
 	//sort the table in decreasing order to print
       	HASH_SORT(hostsHashT, hash_stats_sort_to_print);
-
+      	
 	//print the element of the hash table
    	int j;
 	HASH_ITER(hh, hostsHashT, host_iter, tmp){
-
+		
 		printf("\t%s", host_iter->domain_name);
-		//to print the occurency in aligned column
+		//to print the occurency in aligned column	    	
 		int diff = len_max-strlen(host_iter->domain_name);
 	    	for (j = 0; j <= diff+5;j++)
 	    		printf (" ");
@@ -3132,7 +3132,7 @@ static void printFlowsStats() {
 	   HASH_DEL(hostsHashT, host_iter);
 	   ndpi_free(host_iter);
 	}
-
+	    
   }
 
     /* Print all flows stats */
@@ -3934,8 +3934,9 @@ static int ndpi_process_packet_dpdk(u_char *args,
   }
   memcpy(packet_checked, packet, header->caplen);
   int rsl_mask = 1;
+  printf("ndpi_process_packet_dpdk start\n");
   p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked, &flow_risk, 0, &rsl_mask);
-
+  printf("ndpi_process_packet_dpdk end\n");
   if(!pcap_start.tv_sec) pcap_start.tv_sec = header->ts.tv_sec, pcap_start.tv_usec = header->ts.tv_usec;
   pcap_end.tv_sec = header->ts.tv_sec, pcap_end.tv_usec = header->ts.tv_usec;
 
@@ -4253,13 +4254,14 @@ void * processing_thread(void *_thread_id) {
       gettimeofday(&h.ts, NULL);
       int rsl_mask = 1;
       rsl_mask = ndpi_process_packet_dpdk((u_char*)&thread_id, &h, (const u_char *)data);
-      if(rsl_mask == 1){
+      if(rsl_mask == 1){  
         rte_pktmbuf_free(bufs[i]);
         count--;
+        printf("ndpi_process_packet_dpdk rsl_mask = 1 \n");
       }
     }
     if(count != 0){
-      rte_eth_rx_burst(dpdk_port_id, 0, bufs, count);
+      rte_eth_tx_burst(dpdk_port_id, 0, bufs, count);
     }
   }
 #else
@@ -5176,7 +5178,7 @@ void zscoreUnitTest() {
 
   if(do_trace) {
     printf("outliers: %u\n", num_outliers);
-
+    
     for(i=0; i<num; i++)
       printf("%u %s\n", values[i], outliers[i] ? "OUTLIER" : "OK");
   }
