@@ -2470,9 +2470,6 @@ static uint32_t crc32_for_byte(uint32_t r) {
   return r ^ (uint32_t)0xFF000000L;
 }
 
-/* Any unsigned integer type with at least 32 bits may be used as
- * accumulator type for fast crc32-calulation, but unsigned long is
- * probably the optimal choice for most systems. */
 typedef unsigned long accum_t;
 
 static void init_tables(uint32_t* table, uint32_t* wtable) {
