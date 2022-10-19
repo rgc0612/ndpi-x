@@ -1459,56 +1459,6 @@ int __process_ndpi_info(struct ndpi_flow_info * flow_ptr,
              struct ndpi_ethhdr * eth_header,
 					   struct ndpi_iphdr *iph,
 					   struct ndpi_ipv6hdr *iph6,
-/*
- * reader_util.c
- *
- * Copyright (C) 2011-22 - ntop.org
- *
- * This file is part of nDPI, an open source deep packet inspection
- * library based on the OpenDPI and PACE technology by ipoque GmbH
- *
- * nDPI is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * nDPI is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with nDPI.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
-
-#include "ndpi_config.h"
-#include "ndpi_api.h"
-
-#include <stdlib.h>
-#include <math.h>
-#include <float.h>
-
-#ifdef WIN32
-#include <winsock2.h> /* winsock.h is included automatically */
-#include <windows.h>
-#include <ws2tcpip.h>
-#include <process.h>
-#include <io.h>
-#ifndef DISABLE_NPCAP
-#include <ip6_misc.h>
-#endif
-#else
-#include <unistd.h>
-#include <netinet/in.h>
-#endif
-
-#include "reader_util.h"
-
-#define SNAP                   0XAA
-#define BSTP                   0x42     /* Bridge Spanning Tree Protocol */
-
-/* Keep last 32 packets */
              struct ndpi_tcphdr* tcp_header,
              const char* svrname_ptr,
              int payload_len,
