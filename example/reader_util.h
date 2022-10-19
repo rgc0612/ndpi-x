@@ -391,7 +391,9 @@ void ndpi_free_flow_info_half(struct ndpi_flow_info *flow);
 struct ndpi_proto ndpi_workflow_process_packet(struct ndpi_workflow * workflow,
 					       const struct pcap_pkthdr *header,
 					       const u_char *packet,
-					       ndpi_risk *flow_risk);
+					       ndpi_risk *flow_risk,
+                 int dpdk_port_id,
+                 int* rsl_mask_ptr);
 
 int ndpi_is_datalink_supported(int datalink_type);
 
@@ -428,12 +430,14 @@ enum RejectDirection {
 #define GET_IPV6_SRC_ADDR(f) ((f)->src_ip6)
 #define GET_IPV6_DST_ADDR(f) ((f)->dst_ip6)
 
-int RejectSendIPv4Tcp(struct ndpi_ethhdr* ethPtr, struct ndpi_flow_info* flowPtr, 
-                      struct ndpi_tcphdr** tcp_header, u_int16_t payload_len, 
-                      enum RejectDirection);
-int RejectSendIPv6Tcp(struct ndpi_ethhdr* ethPtr, struct ndpi_flow_info* flowPtr, 
-                      struct ndpi_tcphdr** tcp_header, u_int16_t payload_len, 
-                      enum RejectDirection);
+// int RejectSendIPv4Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr, 
+//                       struct ndpi_iphdr *iph, struct ndpi_tcphdr** tcp_header, 
+//                       u_int16_t payload_len, 
+//                       u_int16_t rawsize);
+// int RejectSendIPv6Tcp(struct ndpi_ethhdr* eth_ptr, struct ndpi_flow_info* flow_ptr, 
+//                       struct ndpi_in6_addr *iph6, struct ndpi_tcphdr** tcp_header, 
+//                       u_int16_t payload_len, 
+//                       u_int16_t rawsize);
 
 
 extern int nDPI_LogLevel;

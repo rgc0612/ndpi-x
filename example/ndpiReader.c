@@ -151,7 +151,7 @@ typedef struct node_a {
 
 // struct to add more statitcs in function printFlowStats
 typedef struct hash_stats{
-  char* domain_name;  
+  char* domain_name;
   int occurency;       /* how many time domain name occury in the flow */
   UT_hash_handle hh;   /* hashtable to collect the stats */
 }hash_stats;
@@ -1686,15 +1686,15 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
     if(flow->flow_payload && (flow->flow_payload_len > 0)) {
       u_int i;
-      
+
       printf("[Payload: ");
 
       for(i=0; i<flow->flow_payload_len; i++)
 	printf("%c", isspace(flow->flow_payload[i]) ? '.' : flow->flow_payload[i]);
-	
+
       printf("]");
     }
-    
+
     fprintf(out, "\n");
   }
 }
@@ -2431,10 +2431,10 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle) {
       label = &label[1];
     else
       label = _customCategoryFilePath;
-    
+
     ndpi_load_categories_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _customCategoryFilePath, label);
   }
-  
+
   if(_riskyDomainFilePath)
     ndpi_load_risk_domain_file(ndpi_thread_info[thread_id].workflow->ndpi_struct, _riskyDomainFilePath);
 
@@ -2659,7 +2659,7 @@ static void printRiskStats() {
 static int hash_stats_sort_to_order(void *_a, void *_b){
 	struct hash_stats *a = (struct hash_stats*)_a;
 	struct hash_stats *b = (struct hash_stats*)_b;
-	
+
 	return (a->occurency - b->occurency);
 }
 
@@ -2669,7 +2669,7 @@ static int hash_stats_sort_to_order(void *_a, void *_b){
 static int hash_stats_sort_to_print(void *_a, void *_b){
 	struct hash_stats *a = (struct hash_stats*)_a;
 	struct hash_stats *b = (struct hash_stats*)_b;
-	
+
 	return (b->occurency - a->occurency);
 }
 
@@ -3037,15 +3037,15 @@ static void printFlowsStats() {
 		struct hash_stats *hostsHashT = NULL;
 		struct hash_stats *host_iter = NULL;
 		struct hash_stats *tmp = NULL;
-		int len_max = 0;    
-		      
+		int len_max = 0;
+
 	      	for (i = 0; i<num_flows; i++){
-			
+
 		if(all_flows[i].flow->host_server_name[0] != '\0'){
-		
+
 			int len = strlen(all_flows[i].flow->host_server_name);
 			len_max = ndpi_max(len,len_max);
-				
+
 			struct hash_stats *hostFound;
 			HASH_FIND_STR(hostsHashT, all_flows[i].flow->host_server_name, hostFound);
 
@@ -3056,28 +3056,28 @@ static void printFlowsStats() {
 				if (HASH_COUNT(hostsHashT) == len_table_max) {
 				  int i=0;
 				  while (i<=toDelete){
-					
+
 				    HASH_ITER(hh, hostsHashT, host_iter, tmp){
 				      HASH_DEL(hostsHashT,host_iter);
 				      free(host_iter);
-				      i++;		
-				    }	
+				      i++;
+				    }
 				  }
-				      	
-				}			
+
+				}
 				HASH_ADD_KEYPTR(hh, hostsHashT, newHost->domain_name, strlen(newHost->domain_name), newHost);
-			}	
+			}
 			else
 			  hostFound->occurency++;
-			
-			
+
+
 		}
-		
+
 		if(all_flows[i].flow->ssh_tls.server_info[0] != '\0'){
-		
+
 			int len = strlen(all_flows[i].flow->host_server_name);
 			len_max = ndpi_max(len,len_max);
-				
+
 			struct hash_stats *hostFound;
 		  	HASH_FIND_STR(hostsHashT, all_flows[i].flow->ssh_tls.server_info, hostFound);
 
@@ -3085,41 +3085,41 @@ static void printFlowsStats() {
 		    		struct hash_stats *newHost = (struct hash_stats*)ndpi_malloc(sizeof(hash_stats));
 	      	    		newHost->domain_name = all_flows[i].flow->ssh_tls.server_info;
 		    		newHost->occurency = 1;
-	    
+
 	    			if ((HASH_COUNT(hostsHashT)) == len_table_max) {
 				  int i=0;
 				  while (i<toDelete){
-		
+
 				    HASH_ITER(hh, hostsHashT, host_iter, tmp){
 			 	     HASH_DEL(hostsHashT,host_iter);
 			  	    ndpi_free(host_iter);
-			   	   i++;		
+			   	   i++;
 			 	   }
-				  }	
-	      			
-	      	
+				  }
+
+
 	    			}
 				HASH_ADD_KEYPTR(hh, hostsHashT, newHost->domain_name, strlen(newHost->domain_name), newHost);
 			}
 			else
 			  hostFound->occurency++;
-			
-			
-		}	
-		
+
+
+		}
+
 		//sort the table by the least occurency
 		HASH_SORT(hostsHashT, hash_stats_sort_to_order);
 	}
 
 	//sort the table in decreasing order to print
       	HASH_SORT(hostsHashT, hash_stats_sort_to_print);
-      	
+
 	//print the element of the hash table
    	int j;
 	HASH_ITER(hh, hostsHashT, host_iter, tmp){
-		
+
 		printf("\t%s", host_iter->domain_name);
-		//to print the occurency in aligned column	    	
+		//to print the occurency in aligned column
 		int diff = len_max-strlen(host_iter->domain_name);
 	    	for (j = 0; j <= diff+5;j++)
 	    		printf (" ");
@@ -3132,7 +3132,7 @@ static void printFlowsStats() {
 	   HASH_DEL(hostsHashT, host_iter);
 	   ndpi_free(host_iter);
 	}
-	    
+
   }
 
     /* Print all flows stats */
@@ -3917,10 +3917,9 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
   return pcap_handle;
 }
 
-/**
- * @brief Check pcap packet
- */
-static void ndpi_process_packet(u_char *args,
+
+#ifdef USE_DPDK
+static int ndpi_process_packet_dpdk(u_char *args,
 				const struct pcap_pkthdr *header,
 				const u_char *packet) {
   struct ndpi_proto p;
@@ -3934,7 +3933,8 @@ static void ndpi_process_packet(u_char *args,
     return ;
   }
   memcpy(packet_checked, packet, header->caplen);
-  p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked, &flow_risk);
+  int rsl_mask = 1;
+  p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked, &flow_risk, 0, &rsl_mask);
 
   if(!pcap_start.tv_sec) pcap_start.tv_sec = header->ts.tv_sec, pcap_start.tv_usec = header->ts.tv_usec;
   pcap_end.tv_sec = header->ts.tv_sec, pcap_end.tv_usec = header->ts.tv_usec;
@@ -4044,6 +4044,136 @@ static void ndpi_process_packet(u_char *args,
     ndpi_free(packet_checked);
     packet_checked = NULL;
   }
+  return rsl_mask;
+}
+#endif
+
+static void ndpi_process_packet(u_char *args,
+				const struct pcap_pkthdr *header,
+				const u_char *packet) {
+  struct ndpi_proto p;
+  ndpi_risk flow_risk;
+  u_int16_t thread_id = *((u_int16_t*)args);
+
+  /* allocate an exact size buffer to check overflows */
+  uint8_t *packet_checked = ndpi_malloc(header->caplen);
+
+  if(packet_checked == NULL){
+    return ;
+  }
+  memcpy(packet_checked, packet, header->caplen);
+  int rsl_mask = 1;
+  p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked, &flow_risk, 0, &rsl_mask);
+
+  if(!pcap_start.tv_sec) pcap_start.tv_sec = header->ts.tv_sec, pcap_start.tv_usec = header->ts.tv_usec;
+  pcap_end.tv_sec = header->ts.tv_sec, pcap_end.tv_usec = header->ts.tv_usec;
+
+  /* Idle flows cleanup */
+  if(live_capture) {
+    if(ndpi_thread_info[thread_id].last_idle_scan_time + IDLE_SCAN_PERIOD < ndpi_thread_info[thread_id].workflow->last_time) {
+      /* scan for idle flows */
+      ndpi_twalk(ndpi_thread_info[thread_id].workflow->ndpi_flows_root[ndpi_thread_info[thread_id].idle_scan_idx],
+		 node_idle_scan_walker, &thread_id);
+
+      /* remove idle flows (unfortunately we cannot do this inline) */
+      while(ndpi_thread_info[thread_id].num_idle_flows > 0) {
+	/* search and delete the idle flow from the "ndpi_flow_root" (see struct reader thread) - here flows are the node of a b-tree */
+	ndpi_tdelete(ndpi_thread_info[thread_id].idle_flows[--ndpi_thread_info[thread_id].num_idle_flows],
+		     &ndpi_thread_info[thread_id].workflow->ndpi_flows_root[ndpi_thread_info[thread_id].idle_scan_idx],
+		     ndpi_workflow_node_cmp);
+
+	/* free the memory associated to idle flow in "idle_flows" - (see struct reader thread)*/
+	ndpi_free_flow_info_half(ndpi_thread_info[thread_id].idle_flows[ndpi_thread_info[thread_id].num_idle_flows]);
+	ndpi_free(ndpi_thread_info[thread_id].idle_flows[ndpi_thread_info[thread_id].num_idle_flows]);
+      }
+
+      if(++ndpi_thread_info[thread_id].idle_scan_idx == ndpi_thread_info[thread_id].workflow->prefs.num_roots)
+	ndpi_thread_info[thread_id].idle_scan_idx = 0;
+
+      ndpi_thread_info[thread_id].last_idle_scan_time = ndpi_thread_info[thread_id].workflow->last_time;
+    }
+  }
+
+#ifdef DEBUG_TRACE
+  if(trace) fprintf(trace, "Found %u bytes packet %u.%u\n", header->caplen, p.app_protocol, p.master_protocol);
+#endif
+
+  if(extcap_dumper
+     && ((extcap_packet_filter == (u_int16_t)-1)
+	 || (p.app_protocol == extcap_packet_filter)
+	 || (p.master_protocol == extcap_packet_filter)
+	 )
+     ) {
+    struct pcap_pkthdr h;
+    u_int32_t *crc, delta = sizeof(struct ndpi_packet_trailer) + 4 /* ethernet trailer */;
+    struct ndpi_packet_trailer *trailer;
+    u_int16_t cli_score, srv_score;
+
+    memcpy(&h, header, sizeof(h));
+
+    if(h.caplen > (sizeof(extcap_buf)-sizeof(struct ndpi_packet_trailer) - 4)) {
+      printf("INTERNAL ERROR: caplen=%u\n", h.caplen);
+      h.caplen = sizeof(extcap_buf)-sizeof(struct ndpi_packet_trailer) - 4;
+    }
+
+    trailer = (struct ndpi_packet_trailer*)&extcap_buf[h.caplen];
+    memcpy(extcap_buf, packet, h.caplen);
+    memset(trailer, 0, sizeof(struct ndpi_packet_trailer));
+    trailer->magic = htonl(WIRESHARK_NTOP_MAGIC);
+    trailer->flow_risk = htonl64(flow_risk);
+    trailer->flow_score = htons(ndpi_risk2score(flow_risk, &cli_score, &srv_score));
+    trailer->master_protocol = htons(p.master_protocol), trailer->app_protocol = htons(p.app_protocol);
+    ndpi_protocol2name(ndpi_thread_info[thread_id].workflow->ndpi_struct, p, trailer->name, sizeof(trailer->name));
+    crc = (uint32_t*)&extcap_buf[h.caplen+sizeof(struct ndpi_packet_trailer)];
+    *crc = ethernet_crc32((const void*)extcap_buf, h.caplen+sizeof(struct ndpi_packet_trailer));
+    h.caplen += delta, h.len += delta;
+
+#ifdef DEBUG_TRACE
+    if(trace) fprintf(trace, "Dumping %u bytes packet\n", h.caplen);
+#endif
+
+    pcap_dump((u_char*)extcap_dumper, &h, (const u_char *)extcap_buf);
+    pcap_dump_flush(extcap_dumper);
+  }
+
+  /* check for buffer changes */
+  if(memcmp(packet, packet_checked, header->caplen) != 0)
+    printf("INTERNAL ERROR: ingress packet was modified by nDPI: this should not happen [thread_id=%u, packetId=%lu, caplen=%u]\n",
+	   thread_id, (unsigned long)ndpi_thread_info[thread_id].workflow->stats.raw_packet_count, header->caplen);
+
+  if((u_int32_t)(pcap_end.tv_sec-pcap_start.tv_sec) > pcap_analysis_duration) {
+    unsigned int i;
+    u_int64_t processing_time_usec, setup_time_usec;
+
+    gettimeofday(&end, NULL);
+    processing_time_usec = (u_int64_t)end.tv_sec*1000000 + end.tv_usec - ((u_int64_t)begin.tv_sec*1000000 + begin.tv_usec);
+    setup_time_usec = (u_int64_t)begin.tv_sec*1000000 + begin.tv_usec - ((u_int64_t)startup_time.tv_sec*1000000 + startup_time.tv_usec);
+
+    printResults(processing_time_usec, setup_time_usec);
+
+    for(i=0; i<ndpi_thread_info[thread_id].workflow->prefs.num_roots; i++) {
+      ndpi_tdestroy(ndpi_thread_info[thread_id].workflow->ndpi_flows_root[i], ndpi_flow_info_freer);
+      ndpi_thread_info[thread_id].workflow->ndpi_flows_root[i] = NULL;
+
+      memset(&ndpi_thread_info[thread_id].workflow->stats, 0, sizeof(struct ndpi_stats));
+    }
+
+    if(!quiet_mode)
+      printf("\n-------------------------------------------\n\n");
+
+    memcpy(&begin, &end, sizeof(begin));
+    memcpy(&pcap_start, &pcap_end, sizeof(pcap_start));
+  }
+
+  /*
+    Leave the free as last statement to avoid crashes when ndpi_detection_giveup()
+    is called above by printResults()
+  */
+  if(packet_checked){
+    ndpi_free(packet_checked);
+    packet_checked = NULL;
+  }
+  //return rsl_mask;
 }
 
 #ifndef USE_DPDK
@@ -4113,6 +4243,7 @@ void * processing_thread(void *_thread_id) {
     for(i = 0; i < PREFETCH_OFFSET && i < num; i++)
       rte_prefetch0(rte_pktmbuf_mtod(bufs[i], void *));
 
+    int count = num;
     for(i = 0; i < num; i++) {
       char *data = rte_pktmbuf_mtod(bufs[i], char *);
       int len = rte_pktmbuf_pkt_len(bufs[i]);
@@ -4120,9 +4251,15 @@ void * processing_thread(void *_thread_id) {
 
       h.len = h.caplen = len;
       gettimeofday(&h.ts, NULL);
-
-      ndpi_process_packet((u_char*)&thread_id, &h, (const u_char *)data);
-      rte_pktmbuf_free(bufs[i]);
+      int rsl_mask = 1;
+      rsl_mask = ndpi_process_packet_dpdk((u_char*)&thread_id, &h, (const u_char *)data);
+      if(rsl_mask == 1){
+        rte_pktmbuf_free(bufs[i]);
+        count--;
+      }
+    }
+    if(count != 0){
+      rte_eth_rx_burst(dpdk_port_id, 0, bufs, count);
     }
   }
 #else
@@ -5039,7 +5176,7 @@ void zscoreUnitTest() {
 
   if(do_trace) {
     printf("outliers: %u\n", num_outliers);
-    
+
     for(i=0; i<num; i++)
       printf("%u %s\n", values[i], outliers[i] ? "OUTLIER" : "OK");
   }
